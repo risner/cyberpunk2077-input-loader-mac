@@ -1,0 +1,16 @@
+engine/shadermetal_final.cache
+engine/staticshadermetal_final.cache
+engine/staticshadermetalnative.cache
+engine/staticshadermetalnative_final.cache
+engine/staticshadermsl.metallib
+engine/tools/inputloader
+r6/.DS_Store
+r6/cache/final.redscripts
+r6/cache/final.redscripts.bk
+r6/cache/final.redscripts.ts
+r6/cache/inputContexts.xml
+r6/cache/inputUserMappings.xml
+r6/cache/tweakdb.bin
+r6/cache/tweakdb_ep1.bin
+r6/logs/
+r6/scripts/
