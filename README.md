@@ -14,7 +14,7 @@ https://github.com/jackhumbert/cyberpunk2077-input-loader
 If someome wishes to extend the Windows version to also support macOS without
 RED4ext, you will need code to find the binary's location.
 
-
+```
     uint32_t size = 0;
     _NSGetExecutablePath(nullptr, &size);
     std::vector<char> buf(size);
@@ -24,11 +24,13 @@ RED4ext, you will need code to find the binary's location.
     std::filesystem::canonical(std::string(buf.data()));
 
     std::string filename(buf.begin(), buf.end());
+```
 
 I made a very quick port where I cutting out all RED4ext and Windows-ism.
 Using a build directory (mac) and this Makefile. Of note this works on both
 GNU make and BSD make (VPATH vs .PATH).
 
+```
 VPATH = ../src        # GNU make search ../src for prerequisites
 .PATH: ../src         # BSD make search ../src for prerequisites
 
@@ -47,3 +49,4 @@ all: $(OBJS) inputloader
 
 inputloader: $(OBJS)
         cc -o inputloader $(OBJS) $(LDLIBS)
+```
