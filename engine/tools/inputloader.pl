@@ -7,16 +7,16 @@ use Data::Dumper;
 use strict;
 use warnings;
 
-my $MOD_VERSION_STR = "0.1.1";
+my $MOD_VERSION_STR = "0.1.4";
 
 sub LoadXML {
   my $xmlfile = shift(@_);
 
   # Load the User Mappins XML document
   my $parser = XML::LibXML->new(
-    keep_blanks => 1,	# retain blanks and whitespace nodes
-    no_blanks   => 0,
-    load_ext_dtd => 0	# do not load a DTD
+     keep_blanks => 0,	# retain blanks and whitespace nodes
+     no_blanks   => 0,
+     load_ext_dtd => 0	# do not load a DTD
   );
   my $loaded = eval {
     $parser->parse_file($xmlfile);
@@ -25,8 +25,11 @@ sub LoadXML {
   if ($@) {
     print "Error parsing '$xmlfile':\n$@";
       exit 0;
-  } else {
-    print "Loaded $xmlfile\n";
+  }
+
+  # Find and remove comment nodes
+  foreach my $comment ($loaded->findnodes('//comment()')) {
+    $comment->parentNode->removeChild($comment);
   }
   
   return $loaded;
@@ -82,43 +85,65 @@ sub MergeDocument {
   my $modDocument = LoadXML($path);
   my $document = undef;
 
-  print "Loading document: : $path\n";
-
-  my ($existing);
+  print "Loading document: $path\n";
 
   for my $modNode ($modDocument->findnodes('/bindings/*')) {
+    my ($existing) = undef;
+
+    # e.g. context
     my $tag = $modNode->nodeName;
 
-    my $name = $modNode->getAttribute('name');
-    print("* Processing mod input block: $name\n");
+    $document = undef;
 
-    if (exists($valid_inputUserMappings{$tag})) {
+    print("* Processing mod input block: $tag\n");
 
-      # Search for <bindings>/<tag>[@name="$name"]
-      #($existing) = $inputContextsOriginal->findnodes(
-      #  qq{/bindings/$tag[@name="$name"]}
-      #);
+    if (exists($valid_inputContexts{$tag})) {
+
+      my $name = $modNode->getAttribute('name');
+      if (defined($name)) {
+        # Search for <bindings>/<tag>[@name="$name"]
+        # print("findnodes(" . '/bindings/' . $tag . '[@name="' . $name . '"]' . ")\n");
+        ($existing) = $inputContextsOriginal->findnodes(
+          '/bindings/' . $tag . '[@name="' . $name . '"]'
+        );
+        if (defined($existing)) {
+          # print("Tag: $tag Name: $name found existing " . $existing->nodeName . " using inputContextsOriginal\n");
+        } else {
+          # print("Tag: $tag Name: $name using inputContextsOriginal\n");
+        }
+      } else {
+        # print("Tag: $tag Name:  using inputContextsOriginal\n");
+      }
       $document = $inputContextsOriginal;
 
-    } elsif (exists($valid_inputContexts{$tag})) {
 
-      # Search for <bindings>/<tag>[@name="$name"]
-      #($existing) = $inputUserMappingsOriginal->findnodes(
-      #  qq{/bindings/$tag[\@name="$name"]}
-      #);
+    } elsif (exists($valid_inputUserMappings{$tag})) {
+
+      my $name = $modNode->getAttribute('name');
+      if (defined($name)) {
+        # Search for <bindings>/<tag>[@name="$name"]
+        # print("findnodes(" . '/bindings/' . $tag . '[@name="' . $name . '"]' . ")\n");
+        ($existing) = $inputUserMappingsOriginal->findnodes(
+          '/bindings/' . $tag . '[@name="' . $name . '"]'
+        );
+        if (defined($existing)) {
+          # print("Tag: $tag Name: $name found existing " . $existing->nodeName . " using inputUserMappingsOriginal\n");
+        } else {
+          # print("Tag: $tag Name: $name using inputUserMappingsOriginal\n");
+        }
+      } else {
+        # print("Tag: $tag Name:  using inputUserMappingsOriginal\n");
+      }
       $document = $inputUserMappingsOriginal;
 
     } else {
-      print("* <bindings> child $name not valid\n");
+      print("* <bindings> child $tag not valid\n");
       continue;
     }
 
     # $existing came from one of the original files
     if (defined($existing)) {
-      print "Found: ", $existing->toString, "\n";
-      print(Dumper($modNode));
-      print(Dumper($tag));
-      print(Dumper($name));
+      # print "Found: ", $existing->toString, "\n";
       if ($modNode->getAttribute('append') && $modNode->getAttribute('append') eq 'true') {
         # Append to desired document
         for my $modNodeChild ($modNode->childNodes) {
@@ -131,8 +156,8 @@ sub MergeDocument {
         }
       } else {
         # Replace existing node inside <bindings>
-        my ($bindings) = $document->findnodes('/bindings');
-        print(Dumper($bindings));
+        # TODO This is broken, uses undefined $document
+        my ($bindings) = $document->findnodes('/bindings/*');
         if ($bindings) {
           $bindings->removeChild($existing);
           my $clone = $modNode->cloneNode(1);
@@ -150,7 +175,7 @@ sub MergeDocument {
   }
 }
 
-print("Starting up input_loader $MOD_VERSION_STR\n");
+print("Starting up Input Loader\n");
 
 # What is the path to this script?
 my $gameDir = "$FindBin::Bin/$FindBin::Script";
@@ -169,6 +194,8 @@ if (! -d "$inputDir") {
   make_path($inputDir);
 }
 
+print("Loading original input configs for merging\n");
+
 # Load the Context XML document
 # The mac version has two files, using the one with '_mac' in the name.
 # r6/config/inputContexts_mac.xml
@@ -178,6 +205,7 @@ my $inputContextsOriginal = LoadXML("r6/config/inputContexts_mac.xml");
 my $inputUserMappingsOriginal = LoadXML("r6/config/inputUserMappings.xml");
 
 print("Loading input configs from r6/input\n");
+
 find(
     sub {
         return unless -f $_;            # no directories
@@ -196,3 +224,10 @@ print("Merged inputContexts saved to 'r6/cache/inputContexts.xml'\n");
 
 $inputUserMappingsOriginal->toFile($gameDir . "r6/cache/inputUserMappings.xml", 0);
 print("Merged inputUserMappings saved to 'r6/cache/inputUserMappings.xml'\n");
+
+=pod
+
+Reimplementation of Jack Humbert's
+https://github.com/jackhumbert/cyberpunk2077-input-loader
+
+=cut
