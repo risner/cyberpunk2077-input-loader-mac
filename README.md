@@ -1,18 +1,32 @@
-Version 1.0 - Alpha Release
+Version 1.0
 
 A macOS native implementation of input-loader written in Perl. All macOS systems ship with a version of Perl.
 
 Report issues here and if you know perl and wish to send a PR, I'll check it out.
 
-To install, place the `engine` and `r6` directory contents over your game directory. Then run the `inputloader.pl` in `engine/tools`.
+# Installation
 
+Place `launch_modded.sh` in your game directory. The extrac the `engine` and `r6` directories over your game directory.
+Start the game with `launch_modded.sh`.
 
-----
-This is a reimplementation of Jack Humbert's
+For reference, the orignal files in `r6/config` have the following checksums:
+MD5 (inputContexts_mac.xml) = 60efff8e29829339177585a5e0cab1eb
+MD5 (inputUserMappings.xml) = dac2bd1c63fdf4d62d6ff0026a11287a
+
+# Implementation details
+
+This is a reimplementation of Jack Humbert's input-loader written in Perl. All the libraries needed to run this are shipped with modern macOS operating systems.
 https://github.com/jackhumbert/cyberpunk2077-input-loader
 
-If someome wishes to extend the Windows version to also support macOS without
-RED4ext, you will need code to find the binary's location.
+Requires Redscript 0.5.31 and Game Version 2.31 as a minimum.
+
+# Porting the cpp version to macOS
+
+In testing I ported Jack's original cpp version of input-loader to macOS. But it is a significant change to the code and the CMake files that reimplementing in a native way seems the better approach.
+
+I have shared this here, in case someome wishes to extend the Windows version to also support macOS without RED4ext.
+
+# Where the running binary is stored on disk
 
 ```
     uint32_t size = 0;
@@ -26,9 +40,9 @@ RED4ext, you will need code to find the binary's location.
     std::string filename(buf.begin(), buf.end());
 ```
 
-I made a very quick port where I cutting out all RED4ext and Windows-ism.
-Using a build directory (mac) and this Makefile. Of note this works on both
-GNU make and BSD make (VPATH vs .PATH).
+# Makefile for the cpp version (BSD and GNU make)
+
+The first two lines handle GNU make and BSD make (VPATH vs .PATH) respectively.
 
 ```
 VPATH = ../src        # GNU make search ../src for prerequisites

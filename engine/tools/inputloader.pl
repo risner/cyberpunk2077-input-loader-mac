@@ -7,7 +7,7 @@ use Data::Dumper;
 use strict;
 use warnings;
 
-my $MOD_VERSION_STR = "0.1.4";
+my $MOD_VERSION_STR = "1.0";
 
 sub LoadXML {
   my $xmlfile = shift(@_);
