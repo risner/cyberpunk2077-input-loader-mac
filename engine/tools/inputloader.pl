@@ -7,15 +7,17 @@ use Data::Dumper;
 use strict;
 use warnings;
 
-my $MOD_VERSION_STR = "1.0";
+my $MOD_VERSION_STR = "1.1";
 
 sub LoadXML {
   my $xmlfile = shift(@_);
 
-  # Load the User Mappins XML document
+  print "[InputLoader] Loading XML: $xmlfile\n";
+
+  # Load the User Mappings / Contexts XML document
   my $parser = XML::LibXML->new(
-     keep_blanks => 0,	# retain blanks and whitespace nodes
-     no_blanks   => 0,
+     keep_blanks  => 0,	# retain blanks and whitespace nodes
+     no_blanks    => 0,
      load_ext_dtd => 0	# do not load a DTD
   );
   my $loaded = eval {
@@ -23,8 +25,8 @@ sub LoadXML {
   };
 
   if ($@) {
-    print "Error parsing '$xmlfile':\n$@";
-      exit 0;
+    print "[InputLoader] ERROR parsing '$xmlfile':\n$@\n";
+    return undef;
   }
 
   # Find and remove comment nodes
@@ -83,9 +85,14 @@ sub MergeDocument {
   # * angularDeadzone
 
   my $modDocument = LoadXML($path);
+  if (!defined($modDocument)) {
+    print "[InputLoader] Skipping mod file due to previous XML error: $path\n";
+    return;
+  }
+
   my $document = undef;
 
-  print "Loading document: $path\n";
+  print "[InputLoader] Loading mod document for merge: $path\n";
 
   for my $modNode ($modDocument->findnodes('/bindings/*')) {
     my ($existing) = undef;
@@ -95,7 +102,7 @@ sub MergeDocument {
 
     $document = undef;
 
-    print("* Processing mod input block: $tag\n");
+    print("[InputLoader] * Processing mod input block: $tag\n");
 
     if (exists($valid_inputContexts{$tag})) {
 
@@ -137,13 +144,16 @@ sub MergeDocument {
       $document = $inputUserMappingsOriginal;
 
     } else {
-      print("* <bindings> child $tag not valid\n");
-      continue;
+      print("[InputLoader] * WARNING: <bindings> child '$tag' not valid, skipping.\n");
+      next;
     }
 
     # $existing came from one of the original files
     if (defined($existing)) {
-      # print "Found: ", $existing->toString, "\n";
+      my $name = $modNode->getAttribute('name');
+      my $append_flag = $modNode->getAttribute('append');
+      print "[InputLoader]   Found existing '$tag' block" . (defined($name) ? " with name '$name'" : "") . " (append=" . (defined($append_flag) ? $append_flag : 'false') . ")\n";
+
       if ($modNode->getAttribute('append') && $modNode->getAttribute('append') eq 'true') {
         # Append to desired document
         for my $modNodeChild ($modNode->childNodes) {
@@ -154,76 +164,100 @@ sub MergeDocument {
           my $clone = $modNodeChild->cloneNode(1);
           $existing->appendChild($clone);
         }
+        print "[InputLoader]   Appended children to existing '$tag' block" . (defined($name) ? " ('$name')" : "") . "\n";
       } else {
         # Replace existing node inside <bindings>
-        # TODO This is broken, uses undefined $document
-        my ($bindings) = $document->findnodes('/bindings/*');
+        my ($bindings) = $document->findnodes('/bindings');
         if ($bindings) {
           $bindings->removeChild($existing);
           my $clone = $modNode->cloneNode(1);
           $bindings->appendChild($clone);
+          print "[InputLoader]   Replaced existing '$tag' block" . (defined($name) ? " ('$name')" : "") . "\n";
+        } else {
+          print "[InputLoader]   WARNING: couldn't find <bindings> root while replacing existing '$tag' block\n";
         }
       }
     } else {
-      # Replace existing node inside <bindings>
+      # No existing node: append inside <bindings>
       my ($bindings) = $document->findnodes('/bindings');
       if ($bindings) {
         my $clone = $modNode->cloneNode(1);
         $bindings->appendChild($clone);
+        my $name = $modNode->getAttribute('name');
+        print "[InputLoader]   Added new '$tag' block" . (defined($name) ? " ('$name')" : "") . " to bindings\n";
+      } else {
+        print "[InputLoader]   WARNING: couldn't find <bindings> root while adding new '$tag' block\n";
       }
     }
   }
 }
 
-print("Starting up Input Loader\n");
+print("[InputLoader] Starting up Input Loader (version $MOD_VERSION_STR)\n");
 
 # What is the path to this script?
 my $gameDir = "$FindBin::Bin/$FindBin::Script";
 
-# Assuming we are correctly formatted, go to the gameDir.
+# Assuming we are correctly formatted, derive the gameDir from this script's path.
 if ($gameDir =~ /engine\/tools\/inputloader\.pl$/) {
   $gameDir =~ s/engine\/tools\/inputloader\.pl//;
+  print "[InputLoader] Resolved gameDir to: $gameDir\n";
 } else {
-  print "Failed to find the gameDir, running from $gameDir\n";
+  print "[InputLoader] ERROR: Failed to find the gameDir, running from $gameDir\n";
   exit(0);
 }
 
 # Make the path, if it doesn't exist.
 my $inputDir = $gameDir . "r6/input";
 if (! -d "$inputDir") {
+  print "[InputLoader] Creating input directory: $inputDir\n";
   make_path($inputDir);
 }
 
-print("Loading original input configs for merging\n");
+print("[InputLoader] Loading original input configs for merging\n");
 
 # Load the Context XML document
 # The mac version has two files, using the one with '_mac' in the name.
 # r6/config/inputContexts_mac.xml
-my $inputContextsOriginal = LoadXML("r6/config/inputContexts_mac.xml");
+my $inputContextsOriginal = LoadXML($gameDir . "r6/config/inputContexts_mac.xml");
+if (!defined($inputContextsOriginal)) {
+  print "[InputLoader] FATAL: Failed to load inputContexts_mac.xml, aborting.\n";
+  exit(0);
+}
 
-# Load the User Mappins XML document
-my $inputUserMappingsOriginal = LoadXML("r6/config/inputUserMappings.xml");
+# Load the User Mappings XML document
+my $inputUserMappingsOriginal = LoadXML($gameDir . "r6/config/inputUserMappings.xml");
+if (!defined($inputUserMappingsOriginal)) {
+  print "[InputLoader] FATAL: Failed to load inputUserMappings.xml, aborting.\n";
+  exit(0);
+}
 
-print("Loading input configs from r6/input\n");
+print("[InputLoader] Scanning for input mod XMLs under: $inputDir\n");
 
+my $mod_file_count = 0;
 find(
     sub {
         return unless -f $_;            # no directories
-        return unless /\.xml$/i;        # .xml (case-insensitive)
+        return unless /\.xml$/i;       # .xml (case-insensitive)
         my $path = $File::Find::name;
+        print "[InputLoader] Discovered mod input file: $path\n";
+        $mod_file_count++;
         MergeDocument($path, $inputContextsOriginal, $inputUserMappingsOriginal);
     },
     $inputDir
 );
 
-print("Loading input configs from dynamically added paths - unsupported on macOS at this time\n");
+if ($mod_file_count == 0) {
+    print "[InputLoader] No mod input XML files found in $inputDir (this can be normal).\n";
+}
+
+print("[InputLoader] Loading input configs from dynamically added paths - unsupported on macOS at this time\n");
 
 # save files
 $inputContextsOriginal->toFile($gameDir . "r6/cache/inputContexts.xml", 0);
-print("Merged inputContexts saved to 'r6/cache/inputContexts.xml'\n");
+print("[InputLoader] Merged inputContexts saved to '" . $gameDir . "r6/cache/inputContexts.xml'\n");
 
 $inputUserMappingsOriginal->toFile($gameDir . "r6/cache/inputUserMappings.xml", 0);
-print("Merged inputUserMappings saved to 'r6/cache/inputUserMappings.xml'\n");
+print("[InputLoader] Merged inputUserMappings saved to '" . $gameDir . "r6/cache/inputUserMappings.xml'\n");
 
 =pod
 
